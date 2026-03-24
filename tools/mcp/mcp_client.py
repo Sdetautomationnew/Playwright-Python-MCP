@@ -29,7 +29,6 @@ class MCPClient:
         self.logger = get_logger(self.__class__.__name__)
         self.websocket: Optional[WebSocketClientProtocol] = None
         self.connected = False
-        self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._stub_thread: Optional[threading.Thread] = None
 
     def connect(self, timeout: float = 5.0) -> bool:
@@ -44,61 +43,45 @@ class MCPClient:
 
         try:
             self.logger.info(f"Connecting to MCP server at {self.config.mcp_server_url}")
-            self._loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self._loop)
 
-            self.websocket = self._loop.run_until_complete(
-                asyncio.wait_for(
-                    websockets.connect(
-                        self.config.mcp_server_url,
-                        ping_interval=20,
-                        ping_timeout=10,
-                    ),
-                    timeout=timeout,
-                )
-            )
+            # Avoid asyncio.run() when a loop is already running (pytest/Playwright context)
+            loop = None
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
 
-            # Lightweight handshake so we know the socket is alive
-            handshake = {"type": "ping", "client": "playwright-python-mcp"}
-            self._loop.run_until_complete(self.websocket.send(json.dumps(handshake)))
-            _ = self._loop.run_until_complete(
-                asyncio.wait_for(self.websocket.recv(), timeout=timeout)
-            )
+            if loop is not None and loop.is_running():
+                self.logger.warning("Asyncio event loop already running — skipping MCP connect")
+                self.connected = False
+                return False
 
+            self.websocket = asyncio.run(self._open_connection(timeout))
             self.connected = True
             self.logger.info("MCP connection established")
             return True
         except Exception as exc:
             self.logger.warning(
                 f"Failed to connect to MCP server ({self.config.mcp_server_url}): {exc}. "
-                "Attempting to start local stub server for fallback connectivity."
+                "MCP mode will be disabled for this session."
             )
-            # Try to start a local stub server to keep MCP flow alive
-            if self._start_local_stub():
-                try:
-                    self.logger.info("Retrying MCP connection against local stub server")
-                    self.websocket = self._loop.run_until_complete(
-                        asyncio.wait_for(
-                            websockets.connect(
-                                self.config.mcp_server_url,
-                                ping_interval=20,
-                                ping_timeout=10,
-                            ),
-                            timeout=timeout,
-                        )
-                    )
-                    handshake = {"type": "ping", "client": "playwright-python-mcp-stub"}
-                    self._loop.run_until_complete(self.websocket.send(json.dumps(handshake)))
-                    _ = self._loop.run_until_complete(
-                        asyncio.wait_for(self.websocket.recv(), timeout=timeout)
-                    )
-                    self.connected = True
-                    self.logger.info("Connected to local MCP stub server")
-                    return True
-                except Exception as stub_exc:
-                    self.logger.warning(f"Stub server connection failed: {stub_exc}")
             self.connected = False
-        return self.connected
+            return False
+
+    async def _open_connection(self, timeout: float) -> WebSocketClientProtocol:
+        websocket = await asyncio.wait_for(
+            websockets.connect(
+                self.config.mcp_server_url,
+                ping_interval=20,
+                ping_timeout=10,
+            ),
+            timeout=timeout,
+        )
+
+        handshake = {"type": "ping", "client": "playwright-python-mcp"}
+        await websocket.send(json.dumps(handshake))
+        await asyncio.wait_for(websocket.recv(), timeout=timeout)
+        return websocket
 
     def _start_local_stub(self) -> bool:
         """
@@ -158,15 +141,10 @@ class MCPClient:
         """
         try:
             if self.websocket and not self.websocket.closed:
-                self._loop.run_until_complete(self.websocket.close())
+                asyncio.run(self.websocket.close())
         except Exception as exc:
             self.logger.debug(f"Error during MCP disconnect: {exc}")
         finally:
-            if self._loop and self._loop.is_running():
-                self._loop.stop()
-            if self._loop:
-                self._loop.close()
-                self._loop = None
             self.websocket = None
             self.connected = False
 
@@ -180,10 +158,17 @@ class MCPClient:
         message = {"action": action, "payload": payload}
         timeout = self.config.default_action_timeout_ms / 1000
 
-        self._loop.run_until_complete(self.websocket.send(json.dumps(message)))
-        raw = self._loop.run_until_complete(
-            asyncio.wait_for(self.websocket.recv(), timeout=timeout)
-        )
+        # Avoid running asyncio.run() inside an active loop.
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop is not None and loop.is_running():
+            raise RuntimeError("Asyncio loop already running, cannot perform MCP action")
+
+        asyncio.run(self.websocket.send(json.dumps(message)))
+        raw = asyncio.run(asyncio.wait_for(self.websocket.recv(), timeout=timeout))
 
         try:
             return json.loads(raw)

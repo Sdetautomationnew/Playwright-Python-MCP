@@ -52,7 +52,7 @@ class BaseAPIClient:
         self.logger.info(f"{method} {url} - Status: {response.status_code}")
         return response
 
-    def get(self, endpoint: str, params: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
+    def get(self, endpoint: str, params: Optional[Dict[str, Any]] = None, **kwargs) -> requests.Response:
         """
         Perform GET request.
 
@@ -62,12 +62,12 @@ class BaseAPIClient:
             **kwargs: Additional parameters.
 
         Returns:
-            JSON response.
+            Response object.
         """
         response = self._make_request('GET', endpoint, params=params, **kwargs)
-        return response.json()
+        return response
 
-    def post(self, endpoint: str, data: Optional[Dict[str, Any]] = None, json: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
+    def post(self, endpoint: str, data: Optional[Dict[str, Any]] = None, json: Optional[Dict[str, Any]] = None, **kwargs) -> requests.Response:
         """
         Perform POST request.
 
@@ -78,12 +78,12 @@ class BaseAPIClient:
             **kwargs: Additional parameters.
 
         Returns:
-            JSON response.
+            Response object.
         """
         response = self._make_request('POST', endpoint, data=data, json=json, **kwargs)
-        return response.json()
+        return response
 
-    def put(self, endpoint: str, data: Optional[Dict[str, Any]] = None, json: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
+    def put(self, endpoint: str, data: Optional[Dict[str, Any]] = None, json: Optional[Dict[str, Any]] = None, **kwargs) -> requests.Response:
         """
         Perform PUT request.
 
@@ -94,12 +94,12 @@ class BaseAPIClient:
             **kwargs: Additional parameters.
 
         Returns:
-            JSON response.
+            Response object.
         """
         response = self._make_request('PUT', endpoint, data=data, json=json, **kwargs)
-        return response.json()
+        return response
 
-    def delete(self, endpoint: str, **kwargs) -> Dict[str, Any]:
+    def delete(self, endpoint: str, **kwargs) -> requests.Response:
         """
         Perform DELETE request.
 
@@ -108,7 +108,7 @@ class BaseAPIClient:
             **kwargs: Additional parameters.
 
         Returns:
-            JSON response.
+            Response object.
         """
         response = self._make_request('DELETE', endpoint, **kwargs)
-        return response.json()
+        return response

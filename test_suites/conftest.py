@@ -1,6 +1,9 @@
 import pytest
+import time
 import uuid
 from typing import Generator, Optional
+from datetime import datetime
+from pathlib import Path
 
 from playwright.sync_api import Browser, BrowserContext, Page
 from core.config.runtime_config import EnvConfig
@@ -17,10 +20,11 @@ from app.ui.pages.checkout_page import CheckoutPage
 from app.ui.components.cart_widget_component import CartWidgetComponent
 
 from core.reporting.telemetry_client import get_logger
+from core.reporting.test_report_manager import get_test_report_manager
 from core.integrations.jira_gateway import JiraGateway as JiraClient
 from core.integrations.testrail_gateway import TestRailGateway as TestRailClient
 
-# ⭐ MCP optional import
+# â­ MCP optional import
 try:
     from tools.mcp.mcp_client import MCPClient
     MCP_AVAILABLE = True
@@ -44,7 +48,7 @@ pytest_plugins = (
 # =========================================================
 
 def pytest_addoption(parser):
-    parser.addoption("--env", action="store", default="staging", help="Execution environment")
+    parser.addoption("--env", action="store", default=None, help="Execution environment (matches environments/<name>.env)")
     parser.addoption("--debug-mode", action="store_true", help="Headed + slowmo + tracing")
     parser.addoption("--use-mcp", action="store_true", help="Enable AI MCP execution mode")
 
@@ -82,11 +86,19 @@ def browser(pytestconfig, env_config) -> Generator[Browser, None, None]:
 # =========================================================
 
 @pytest.fixture(scope="function")
-def context(browser: Browser, pytestconfig) -> Generator[BrowserContext, None, None]:
+def context(browser: Browser, pytestconfig, request) -> Generator[BrowserContext, None, None]:
     debug_mode = pytestconfig.getoption("--debug-mode")
+    
+    # Create unique per-test video directory (prevents parallel collisions)
+    execution_date = datetime.now().strftime("%Y-%m-%d")
+    video_dir = Path(f"reports/{execution_date}/temp_videos/{uuid.uuid4().hex}")
+    video_dir.mkdir(parents=True, exist_ok=True)
+
+    # Attach to the test item for later organization in pytest_runtest_protocol
+    request.node.video_source_dir = video_dir
 
     context = browser.new_context(
-        record_video_dir="reports/videos",
+        record_video_dir=str(video_dir),
         record_video_size={"width": 1280, "height": 720},
         ignore_https_errors=True
     )
@@ -118,14 +130,14 @@ def page(context: BrowserContext, env_config) -> Generator[Page, None, None]:
 
 
 # =========================================================
-# ⭐ MCP CLIENT FIXTURE (MAIN INTEGRATION POINT)
+# â­ MCP CLIENT FIXTURE (MAIN INTEGRATION POINT)
 # =========================================================
 
 @pytest.fixture(scope="function")
 def mcp_client(pytestconfig, env_config) -> Optional["MCPClient"]:
     """
     Optional MCP execution layer.
-    Returns None when MCP disabled → framework falls back to POM.
+    Returns None when MCP disabled â†’ framework falls back to POM.
     """
 
     cli_flag = pytestconfig.getoption("--use-mcp")
@@ -204,7 +216,7 @@ def testrail_client(env_config) -> TestRailClient:
 
 
 # =========================================================
-# FAILURE HOOK
+# FAILURE HOOK - CUSTOM SCREENSHOT & VIDEO NAMING
 # =========================================================
 
 @pytest.hookimpl(hookwrapper=True)
@@ -220,27 +232,35 @@ def pytest_runtest_makereport(item, call):
             jira_client = item.funcargs.get("jira_client")
 
             if page:
-                safe_name = item.nodeid.replace("/", "_").replace("::", "_")
-                uid = uuid.uuid4().hex[:8]
-
-                screenshot = f"reports/screenshots/{safe_name}_{uid}.png"
-                page.screenshot(path=screenshot, full_page=True)
+                # Get test report manager
+                report_manager = get_test_report_manager()
+                test_name = item.nodeid.split("::")[-1].split("[")[0]
+                
+                # Save screenshot with proper naming and folder structure
+                test_folder = report_manager.get_test_folder(test_name)
+                screenshot_filename = report_manager.get_screenshot_filename(test_name)
+                screenshots_dir = test_folder / "screenshots"
+                screenshots_dir.mkdir(parents=True, exist_ok=True)
+                screenshot_path = screenshots_dir / screenshot_filename
+                
+                page.screenshot(path=str(screenshot_path), full_page=True)
 
                 trace = None
                 if context and getattr(context, "_codex_tracing_started", False):
-                    trace = f"reports/traces/{safe_name}_{uid}.zip"
+                    trace = f"reports/traces/{test_name}_{uuid.uuid4().hex[:8]}.zip"
                     context.tracing.stop(path=trace)
                     context._codex_tracing_started = False
 
                 logger = get_logger("FailureHook")
                 logger.error(f"FAILED: {item.nodeid}")
-                logger.error(f"Screenshot -> {screenshot}")
+                logger.error(f"Screenshot â†’ {screenshot_path}")
+                logger.error(f"Report Structure: {report_manager.date_folder}")
 
                 if jira_client:
                     jira_client.create_issue(
                         summary=f"Automation Failure: {item.nodeid}",
                         description=f"Env: {env_config.current_env}\nError: {call.excinfo}",
-                        attachments=[path for path in (screenshot, trace) if path],
+                        attachments=[str(path) for path in (screenshot_path, trace) if path],
                         labels=["automation", "failure"],
                         env_metadata={"env": env_config.current_env}
                     )
@@ -248,3 +268,76 @@ def pytest_runtest_makereport(item, call):
         except Exception as e:
             logger = get_logger("FailureHook")
             logger.error(f"Failure hook error: {e}")
+
+
+# =========================================================
+# VIDEO ORGANIZATION HOOK
+# =========================================================
+
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_protocol(item, nextitem):
+    """Hook to organize videos with proper naming after test execution."""
+    outcome = yield
+    
+    try:
+        # Get test name
+        test_name = item.nodeid.split("::")[-1].split("[")[0]
+        report_manager = get_test_report_manager()
+
+        # Determine source directory for this test
+        video_source_dir = getattr(item, "video_source_dir", None)
+        if not video_source_dir:
+            execution_date = datetime.now().strftime("%Y-%m-%d")
+            video_source_dir = Path(f"reports/{execution_date}/videos")
+
+        if video_source_dir and video_source_dir.exists():
+            video_files = list(video_source_dir.glob("*.webm"))
+            if video_files:
+                test_folder = report_manager.get_test_folder(test_name)
+                videos_folder = test_folder / "videos"
+                videos_folder.mkdir(parents=True, exist_ok=True)
+
+                for video_file in video_files:
+                    video_filename = report_manager.get_video_filename(test_name)
+                    video_destination = videos_folder / video_filename
+
+                    retries = 3
+                    for attempt in range(retries):
+                        try:
+                            video_file.replace(video_destination)
+                            logger = get_logger("VideoOrganization")
+                            logger.info(f"Video saved: {video_destination}")
+                            break
+                        except (PermissionError, OSError) as exc:
+                            if attempt == retries - 1:
+                                logger = get_logger("VideoOrganization")
+                                logger.warning(f"Video move failed after {retries} attempts: {exc}")
+                            else:
+                                time.sleep(0.2)
+                                continue
+
+                # Clean up temporary source directories after successful moves
+                try:
+                    if not any(video_source_dir.iterdir()):
+                        video_source_dir.rmdir()
+                except OSError as cleanup_exc:
+                    logger = get_logger("VideoOrganization")
+                    logger.warning(f"Failed to cleanup temp source folder: {cleanup_exc}")
+
+        # global temp cleanup of stale empty subfolders
+        try:
+            execution_date = datetime.now().strftime("%Y-%m-%d")
+            temp_videos_root = Path(f"reports/{execution_date}/temp_videos")
+            if temp_videos_root.exists():
+                for sub in temp_videos_root.iterdir():
+                    if sub.is_dir() and not any(sub.iterdir()):
+                        sub.rmdir()
+                if not any(temp_videos_root.iterdir()):
+                    temp_videos_root.rmdir()
+        except Exception as cleanup_exc:
+            logger = get_logger("VideoOrganization")
+            logger.warning(f"Temp video root cleanup failed: {cleanup_exc}")
+
+    except Exception as e:
+        logger = get_logger("VideoOrganization")
+        logger.warning(f"Video organization error: {e}")

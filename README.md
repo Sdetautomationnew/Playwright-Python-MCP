@@ -358,6 +358,7 @@ Integration status:
 3. Install Playwright Chromium
 4. Copy `.env.example` to `.env`
 5. Fill in any optional integration values you actually use
+6. Install pre-commit hooks (optional but recommended)
 
 ```bash
 python -m venv venv
@@ -365,6 +366,7 @@ venv\Scripts\activate
 pip install -r requirements.txt
 python -m playwright install chromium
 copy .env.example .env
+pre-commit install  # Optional: install pre-commit hooks
 ```
 
 Example environment values:
@@ -453,15 +455,159 @@ allure generate reports\allure-results -o reports\allure-report --clean
 ## CI and CD
 
 GitHub Actions:
-- workflow file: `.github/workflows/playwright_ci.yml`
-- runs suite slices and uploads `reports/`
-- deploys the pytest HTML report on pushes to `main`
+- workflow file: `.github/workflows/qa-automation-ci.yml`
+- runs smoke tests, regression tests, and staging E2E tests
+- uploads test results as artifacts
+- supports parallel execution with pytest-xdist
 
 Jenkins:
 - pipeline file: `Jenkinsfile`
 - supports Windows and Linux agents
 - publishes JUnit results and archives reports
 - can publish pytest HTML and Allure data when the matching plugins are installed
+
+## Environment Selection
+
+The framework supports multiple environments through configuration files in the `environments/` folder:
+
+```bash
+# Run tests in development environment
+pytest --env dev
+
+# Run tests in staging environment
+pytest --env staging
+
+# Run tests in production environment
+pytest --env prod
+```
+
+Environment files override base settings:
+- `environments/base.env` — Shared defaults
+- `environments/dev.env` — Development overrides
+- `environments/staging.env` — Staging overrides
+- `environments/prod.env` — Production overrides
+- `.env` — Local overrides (not committed)
+
+## MCP Mode (Local/Remote E2E)
+
+The framework supports optional Model Context Protocol (MCP) integration for AI-assisted test execution:
+
+### Local MCP Mode
+```bash
+# Start local MCP stub server
+python tools/mcp/mcp_stub_server.py
+
+# Run MCP-enabled tests
+pytest --use-mcp -v
+```
+
+### Remote MCP Mode
+```bash
+# Configure remote MCP server
+echo "MCP_SERVER_URL=ws://your-mcp-server:8080" >> .env
+echo "MCP_ENABLED=true" >> .env
+
+# Run tests with remote MCP
+pytest --use-mcp -v
+```
+
+MCP features:
+- AI-assisted element interactions
+- Automatic fallback to POM when MCP unavailable
+- Configurable via `MCP_ENABLED` and `MCP_SERVER_URL`
+- Graceful degradation when MCP server is unreachable
+
+## Report Organization
+
+Test reports are organized by date and test case:
+
+```
+reports/
+├── 2026-03-24/                    # Date-based folder
+│   ├── test_login_standard_user/  # Test case folder
+│   │   ├── screenshots/
+│   │   │   └── test_login_standard_user_20260324_143015_123.png
+│   │   └── videos/
+│   │       └── test_login_standard_user_20260324_143015_123.webm
+│   ├── test_add_to_cart/
+│   │   ├── screenshots/
+│   │   │   └── test_add_to_cart_20260324_143020_456.png
+│   │   └── videos/
+│   │       └── test_add_to_cart_20260324_143020_456.webm
+│   └── ...
+├── index.html                     # Pytest HTML report
+├── junit-report.xml              # JUnit XML for CI
+└── allure-results/               # Allure raw data
+```
+
+## Failure Triage Steps
+
+When tests fail, follow this systematic approach:
+
+### 1. Check HTML Report
+```bash
+# Open main report
+start reports/index.html
+```
+- Shows test status, duration, and error messages
+- Links to screenshots and videos
+
+### 2. Review Screenshots
+- Located in `reports/YYYY-MM-DD/test_name/screenshots/`
+- Automatic capture on test failure
+- Shows browser state at failure point
+
+### 3. Review Videos
+- Located in `reports/YYYY-MM-DD/test_name/videos/`
+- Full test execution recording
+- Helps understand user flow and timing issues
+
+### 4. Check Allure Report (if available)
+```bash
+# Generate Allure HTML (requires Allure CLI)
+allure generate reports/allure-results -o reports/allure-report --clean
+allure open reports/allure-report
+```
+- Detailed test execution timeline
+- Step-by-step breakdown
+- Historical trends and comparisons
+
+### 5. Debug Locally
+```bash
+# Run failed test with debugging
+pytest --lf --headed -v -s
+
+# Run with debug mode (slow motion + tracing)
+pytest --debug-mode --headed -k "failed_test_name"
+```
+
+### 6. Common Failure Patterns
+- **Selector issues**: Check page objects in `app/ui/pages/`
+- **Timing issues**: Review wait strategies in components
+- **Data issues**: Verify test data in `data/` folder
+- **Environment issues**: Check `.env` configuration
+- **MCP issues**: Ensure MCP server is running or disable MCP
+
+## Pre-commit Setup
+
+Install pre-commit hooks for code quality:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+Run manually:
+```bash
+pre-commit run --all-files
+```
+
+Pre-commit checks include:
+- **Black**: Code formatting
+- **Flake8**: Style and error checking
+- **MyPy**: Type checking
+- **Trailing whitespace**: Cleanup
+- **Large files**: Prevent accidental commits
 
 ## Known Caveats
 

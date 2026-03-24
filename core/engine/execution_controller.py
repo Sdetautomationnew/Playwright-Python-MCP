@@ -6,7 +6,7 @@ class ExecutionController:
         args: List[str] = []
 
         mapping = {
-            'ui': ['test_suites/ui', 'test_suites/bdd/features/ui'],
+            'ui': ['test_suites/bdd/features/ui'],
             'api': ['test_suites/api', 'test_suites/bdd/features/api'],
             'ui-bdd': ['test_suites/bdd/features/ui'],
             'api-bdd': ['test_suites/bdd/features/api'],

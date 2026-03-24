@@ -9,3 +9,4 @@ python-dotenv
 requests
 pytest-bdd
 websockets
+pre-commit

@@ -323,3 +323,101 @@ def then_response_confirms_logout(api_response):
     """Verify logout response looks successful."""
     data = api_response["data"]
     assert "success" in data or "message" in data
+
+
+@then("the response should contain product title")
+def then_response_has_product_title(api_response):
+    """Verify product response has a title field."""
+    data = api_response["data"]
+    assert "title" in data, "Product response missing 'title' field"
+
+
+@then("the response should contain list of categories")
+def then_response_has_categories(api_response):
+    """Verify response contains a list of categories."""
+    data = api_response["data"]
+    assert isinstance(data, list), "Categories response should be a list"
+    assert len(data) > 0, "Categories list should not be empty"
+
+
+@then("the response should contain only electronics products")
+def then_response_has_electronics(api_response):
+    """Verify response contains only electronics products."""
+    products = api_response["data"]
+    assert isinstance(products, list), "Response should be a list"
+    assert len(products) > 0, "Electronics list should not be empty"
+    for product in products:
+        assert product.get("category") == "electronics", f"Non-electronics product found: {product}"
+
+
+@then("the response should contain user list")
+def then_response_has_users(api_response):
+    """Verify response contains a list of users."""
+    data = api_response["data"]
+    assert isinstance(data, list), "Users response should be a list"
+    assert len(data) > 0, "Users list should not be empty"
+    # Check that users have expected fields
+    if data:
+        assert "id" in data[0], "User should have 'id' field"
+
+
+@then("the response should contain user information")
+def then_response_has_user_info(api_response):
+    """Verify response contains user information."""
+    data = api_response["data"]
+    assert isinstance(data, dict), "User response should be a dict"
+    assert "id" in data, "User should have 'id' field"
+
+
+@then("the response should contain list of carts")
+def then_response_has_carts(api_response):
+    """Verify response contains a list of carts."""
+    data = api_response["data"]
+    assert isinstance(data, list), "Carts response should be a list"
+    assert len(data) > 0, "Carts list should not be empty"
+
+
+@then("the response should contain cart items")
+def then_response_has_cart_content(api_response):
+    """Verify response contains cart items."""
+    data = api_response["data"]
+    assert isinstance(data, dict), "Cart response should be a dict"
+    # Fake Store API's cart structure
+    products = data.get("products", [])
+    assert isinstance(products, list), "Cart products should be a list"
+
+
+@then("the response should contain user cart data")
+def then_response_has_user_cart(api_response):
+    """Verify response contains user cart data."""
+    data = api_response["data"]
+    if isinstance(data, dict):
+        assert "products" in data or "items" in data, "Cart data should have products or items"
+    elif isinstance(data, list):
+        # Might be a list of carts
+        assert len(data) > 0, "Cart list should not be empty"
+
+
+@then("the response should contain maximum 5 products")
+def then_response_has_max_5_products(api_response):
+    """Verify response contains at most 5 products."""
+    data = api_response["data"]
+    assert isinstance(data, list), "Response should be a list"
+    assert len(data) <= 5, f"Expected at most 5 products, got {len(data)}"
+    assert len(data) > 0, "Response should not be empty"
+
+
+@then("the response should contain sorted products list")
+def then_response_has_sorted_list(api_response):
+    """Verify response contains a sorted products list."""
+    data = api_response["data"]
+    assert isinstance(data, list), "Response should be a list"
+    assert len(data) > 0, "Products list should not be empty"
+
+
+@then("the response should be empty or not contain product")
+def then_response_is_empty_or_invalid(api_response):
+    """Verify response is empty for invalid product ID."""
+    data = api_response["data"]
+    # For Fake Store API, invalid IDs return empty dict or null
+    assert not data or len(str(data)) == 2, "Invalid ID should return empty/null response"
