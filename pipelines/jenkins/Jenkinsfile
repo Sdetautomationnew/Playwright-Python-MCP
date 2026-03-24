@@ -1,0 +1,215 @@
+def resolvePytestSelection(String suite) {
+    switch (suite) {
+        case 'ui':
+            return 'test_suites/ui test_suites/bdd/features/ui'
+        case 'api':
+            return 'test_suites/api test_suites/bdd/features/api'
+        case 'ui-bdd':
+            return 'test_suites/bdd/features/ui'
+        case 'api-bdd':
+            return 'test_suites/bdd/features/api'
+        case 'smoke':
+            return '-m smoke'
+        case 'regression':
+            return '-m regression'
+        case 'all':
+        default:
+            return ''
+    }
+}
+
+pipeline {
+    agent any
+
+    options {
+        disableConcurrentBuilds()
+        timestamps()
+        buildDiscarder(logRotator(numToKeepStr: '20', artifactNumToKeepStr: '20'))
+        skipDefaultCheckout(true)
+    }
+
+    parameters {
+        choice(
+            name: 'SUITE',
+            choices: ['all', 'ui', 'api', 'ui-bdd', 'api-bdd', 'smoke', 'regression'],
+            description: 'Select which framework slice to execute.'
+        )
+        choice(
+            name: 'ENVIRONMENT',
+            choices: ['staging', 'dev', 'prod'],
+            description: 'Maps to the framework ENV override.'
+        )
+        booleanParam(
+            name: 'USE_MCP',
+            defaultValue: false,
+            description: 'Enable MCP-tagged scenarios. Unreachable MCP servers will cause MCP-only tests to skip.'
+        )
+        string(
+            name: 'BASE_URL',
+            defaultValue: 'https://www.saucedemo.com',
+            description: 'Base application URL.'
+        )
+        string(
+            name: 'API_URL',
+            defaultValue: '',
+            description: 'Optional API URL. Leave empty if API BDD scenarios should skip.'
+        )
+        string(
+            name: 'MCP_SERVER_URL',
+            defaultValue: 'ws://localhost:8080',
+            description: 'WebSocket endpoint used when USE_MCP is enabled.'
+        )
+    }
+
+    environment {
+        PYTHONUNBUFFERED = '1'
+        PIP_DISABLE_PIP_VERSION_CHECK = '1'
+        REPORT_DIR = 'reports'
+        VENV_DIR = '.venv-jenkins'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                deleteDir()
+                checkout scm
+            }
+        }
+
+        stage('Initialize') {
+            steps {
+                script {
+                    currentBuild.displayName = "#${env.BUILD_NUMBER} ${params.SUITE}"
+                    currentBuild.description = "env=${params.ENVIRONMENT}, mcp=${params.USE_MCP}"
+                }
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                script {
+                    if (isUnix()) {
+                        sh '''
+                            set -euxo pipefail
+                            python3 -m venv "$VENV_DIR"
+                            . "$VENV_DIR/bin/activate"
+                            python -m pip install --upgrade pip
+                            pip install -r requirements.txt
+                            python -m playwright install --with-deps chromium
+                        '''
+                    } else {
+                        bat '''
+                            py -3 -m venv "%VENV_DIR%"
+                            call "%VENV_DIR%\\Scripts\\activate"
+                            python -m pip install --upgrade pip
+                            pip install -r requirements.txt
+                            python -m playwright install chromium
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Collect Tests') {
+            steps {
+                script {
+                    withEnv([
+                        "ENV=${params.ENVIRONMENT}",
+                        "BASE_URL=${params.BASE_URL}",
+                        "API_URL=${params.API_URL}",
+                        "MCP_SERVER_URL=${params.MCP_SERVER_URL}",
+                        "MCP_ENABLED=${params.USE_MCP ? 'true' : 'false'}"
+                    ]) {
+                        if (isUnix()) {
+                            sh '''
+                                set -euxo pipefail
+                                . "$VENV_DIR/bin/activate"
+                                python -m pytest --collect-only -q
+                            '''
+                        } else {
+                            bat '''
+                                call "%VENV_DIR%\\Scripts\\activate"
+                                python -m pytest --collect-only -q
+                            '''
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Run Tests') {
+            steps {
+                script {
+                    def selection = resolvePytestSelection(params.SUITE)
+                    def pytestCommand = selection ? "python -m pytest ${selection}" : 'python -m pytest'
+
+                    if (params.USE_MCP) {
+                        pytestCommand = "${pytestCommand} --use-mcp"
+                    }
+
+                    withEnv([
+                        "ENV=${params.ENVIRONMENT}",
+                        "BASE_URL=${params.BASE_URL}",
+                        "API_URL=${params.API_URL}",
+                        "MCP_SERVER_URL=${params.MCP_SERVER_URL}",
+                        "MCP_ENABLED=${params.USE_MCP ? 'true' : 'false'}"
+                    ]) {
+                        if (isUnix()) {
+                            sh """
+                                set -euxo pipefail
+                                mkdir -p "$REPORT_DIR/allure-results" "$REPORT_DIR/screenshots" "$REPORT_DIR/traces" "$REPORT_DIR/videos"
+                                . "$VENV_DIR/bin/activate"
+                                ${pytestCommand}
+                            """
+                        } else {
+                            bat """
+                                if not exist "%REPORT_DIR%\\allure-results" mkdir "%REPORT_DIR%\\allure-results"
+                                if not exist "%REPORT_DIR%\\screenshots" mkdir "%REPORT_DIR%\\screenshots"
+                                if not exist "%REPORT_DIR%\\traces" mkdir "%REPORT_DIR%\\traces"
+                                if not exist "%REPORT_DIR%\\videos" mkdir "%REPORT_DIR%\\videos"
+                                call "%VENV_DIR%\\Scripts\\activate"
+                                ${pytestCommand}
+                            """
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            junit allowEmptyResults: true, testResults: 'reports/junit-report.xml'
+            archiveArtifacts allowEmptyArchive: true, artifacts: 'reports/**'
+
+            script {
+                if (fileExists('reports/index.html')) {
+                    try {
+                        publishHTML(target: [
+                            allowMissing: true,
+                            alwaysLinkToLastBuild: true,
+                            keepAll: true,
+                            reportDir: 'reports',
+                            reportFiles: 'index.html',
+                            reportName: 'Pytest HTML Report'
+                        ])
+                    } catch (Exception err) {
+                        echo "HTML Publisher plugin not available: ${err.getMessage()}"
+                    }
+                }
+
+                if (fileExists('reports/allure-results')) {
+                    try {
+                        allure(
+                            includeProperties: false,
+                            jdk: '',
+                            results: [[path: 'reports/allure-results']]
+                        )
+                    } catch (Exception err) {
+                        echo "Allure plugin not available: ${err.getMessage()}"
+                    }
+                }
+            }
+        }
+    }
+}

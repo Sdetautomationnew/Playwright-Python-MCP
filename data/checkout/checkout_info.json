@@ -1,0 +1,29 @@
+[
+    {
+        "first_name": "John",
+        "last_name": "Doe",
+        "zip_code": "12345",
+        "expected_success": true
+    },
+    {
+        "first_name": "",
+        "last_name": "Doe",
+        "zip_code": "12345",
+        "expected_success": false,
+        "expected_error": "Error: First Name is required"
+    },
+    {
+        "first_name": "John",
+        "last_name": "",
+        "zip_code": "12345",
+        "expected_success": false,
+        "expected_error": "Error: Last Name is required"
+    },
+    {
+        "first_name": "John",
+        "last_name": "Doe",
+        "zip_code": "",
+        "expected_success": false,
+        "expected_error": "Error: Postal Code is required"
+    }
+]

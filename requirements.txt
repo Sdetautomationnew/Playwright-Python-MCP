@@ -1,0 +1,11 @@
+playwright
+pytest
+pytest-playwright
+pytest-xdist
+pytest-rerunfailures
+allure-pytest
+pytest-html
+python-dotenv
+requests
+pytest-bdd
+websockets

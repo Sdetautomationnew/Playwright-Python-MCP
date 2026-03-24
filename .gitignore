@@ -1,0 +1,94 @@
+# Virtual Environments
+venv/
+env/
+ENV/
+.venv/
+
+# Python Cache & Artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+.pytest.ini
+coverage.xml
+*.cover
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# IDE & Editor
+.vscode/settings.json
+.vscode/launch.json
+.vscode/extensions.json
+.idea/
+.DS_Store
+*.swp
+*.swo
+*~
+.sublime-project
+.sublime-workspace
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Test Reports & Logs
+reports/
+logs/
+*.log
+allure-report/
+allure-results/
+test-results/
+
+# Node & Package Managers
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Playwright
+browsers/
+.auth/
+
+# Misc
+*.bak
+*.tmp
+.venv
+*.iml
