@@ -1,2 +1,2 @@
 class HtmlReportAdapter:
-    output_path = 'reports/index.html'
+    output_path = 'reports/report.html'

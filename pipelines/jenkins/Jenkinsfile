@@ -183,14 +183,14 @@ pipeline {
             archiveArtifacts allowEmptyArchive: true, artifacts: 'reports/**'
 
             script {
-                if (fileExists('reports/index.html')) {
+                if (fileExists('reports/report.html')) {
                     try {
                         publishHTML(target: [
                             allowMissing: true,
                             alwaysLinkToLastBuild: true,
                             keepAll: true,
                             reportDir: 'reports',
-                            reportFiles: 'index.html',
+                            reportFiles: 'report.html',
                             reportName: 'Pytest HTML Report'
                         ])
                     } catch (Exception err) {

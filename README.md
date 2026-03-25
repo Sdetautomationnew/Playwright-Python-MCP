@@ -439,12 +439,22 @@ python -m pytest test_suites\bdd\features\ui\test_end_to_end_purchase.py -k mcpa
 
 Pytest writes reports automatically:
 
-- HTML report: `reports/index.html`
+- HTML report: `reports/report.html`
 - JUnit XML: `reports/junit-report.xml`
 - Allure raw results: `reports/allure-results/`
 - logs: `reports/logs/`
 - screenshots: `reports/screenshots/` on failure
 - traces: `reports/traces/` when tracing is enabled
+
+### Email Report (Optional)
+You can email a summary plus attach a zip of the generated report artifacts (including `reports/logs/`) at the end of a pytest run.
+
+Enable it in your `.env` (copy from `.env.example`) by setting:
+- `EMAIL_ENABLED=true`
+- `EMAIL_TO` (comma-separated recipients)
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`
+
+The email is sent automatically by the `pytest_sessionfinish` hook when `EMAIL_ENABLED=true`.
 
 Generate the Allure HTML site if you have the Allure CLI installed:
 
@@ -535,7 +545,7 @@ reports/
 │   │   └── videos/
 │   │       └── test_add_to_cart_20260324_143020_456.webm
 │   └── ...
-├── index.html                     # Pytest HTML report
+├── report.html                   # Pytest HTML report
 ├── junit-report.xml              # JUnit XML for CI
 └── allure-results/               # Allure raw data
 ```
@@ -547,7 +557,7 @@ When tests fail, follow this systematic approach:
 ### 1. Check HTML Report
 ```bash
 # Open main report
-start reports/index.html
+start reports/report.html
 ```
 - Shows test status, duration, and error messages
 - Links to screenshots and videos

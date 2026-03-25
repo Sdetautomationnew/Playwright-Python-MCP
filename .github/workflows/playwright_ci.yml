@@ -144,7 +144,7 @@ jobs:
             echo "- Environment: \`$ENV\`"
             echo "- Suite: \`$DISPATCH_SUITE\`"
             echo "- MCP enabled: \`$DISPATCH_USE_MCP\`"
-            echo "- HTML report artifact: \`reports/index.html\`"
+            echo "- HTML report artifact: \`reports/report.html\`"
             echo "- JUnit XML artifact: \`reports/junit-report.xml\`"
             echo "- Allure raw results artifact: \`reports/allure-results/\`"
           } >> "$GITHUB_STEP_SUMMARY"

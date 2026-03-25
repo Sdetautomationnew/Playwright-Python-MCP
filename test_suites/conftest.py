@@ -76,7 +76,23 @@ def browser(pytestconfig, env_config) -> Generator[Browser, None, None]:
     headless = not headed
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=headless)
+        browser_name = (env_config.get_env_var("BROWSER", "chromium") or "chromium").lower().strip()
+        # Normalize a few common aliases
+        if browser_name == "chrome":
+            browser_name = "chromium"
+
+        launcher = {
+            "chromium": p.chromium,
+            "firefox": p.firefox,
+            "webkit": p.webkit,
+        }.get(browser_name)
+
+        if launcher is None:
+            raise ValueError(
+                f'Unsupported BROWSER="{browser_name}". Expected one of: chromium, firefox, webkit.'
+            )
+
+        browser = launcher.launch(headless=headless)
         yield browser
         browser.close()
 
@@ -341,3 +357,36 @@ def pytest_runtest_protocol(item, nextitem):
     except Exception as e:
         logger = get_logger("VideoOrganization")
         logger.warning(f"Video organization error: {e}")
+
+
+# =========================================================
+# EMAIL REPORT HOOK (OPTIONAL)
+# =========================================================
+
+def pytest_sessionfinish(session, exitstatus):
+    """
+    Optionally email an emailable report + logs summary at the end of the test run.
+
+    Enable with `EMAIL_ENABLED=true` and SMTP settings in `.env` / env files.
+    """
+    try:
+        # Backward compatibility: some CI/report viewers expect `reports/index.html`,
+        # while pytest generates `reports/report.html`.
+        report_html = Path("reports/report.html")
+        index_html = Path("reports/index.html")
+        if report_html.exists() and not index_html.exists():
+            try:
+                index_html.write_bytes(report_html.read_bytes())
+            except Exception:
+                # Never fail the test run because of report alias creation.
+                pass
+
+        from core.config.runtime_config import get_env_config
+        from core.reporting.email_reporter import try_send_email_report
+
+        env_override = session.config.getoption("--env")
+        env_config = get_env_config(env_override)
+        try_send_email_report(env_name=env_config.current_env)
+    except Exception:
+        # Never fail the test run because notification delivery failed.
+        return
