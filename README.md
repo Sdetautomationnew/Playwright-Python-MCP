@@ -386,6 +386,15 @@ MCP_ENABLED=false
 MCP_SERVER_URL=ws://localhost:8080
 DEFAULT_ACTION_TIMEOUT_MS=10000
 DEFAULT_NAVIGATION_TIMEOUT_MS=30000
+EMAIL_ENABLED=false
+EMAIL_TO=
+EMAIL_FROM=
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USERNAME=
+SMTP_PASSWORD=
+EMAIL_USE_TLS=true
+EMAIL_SUBJECT_PREFIX=Playwright Tests
 ```
 
 ## Running Tests
@@ -496,7 +505,8 @@ Environment files override base settings:
 - `environments/dev.env` — Development overrides
 - `environments/staging.env` — Staging overrides
 - `environments/prod.env` — Production overrides
-- `.env` — Local overrides (not committed)
+- `.env` — Local overrides (not committed; use for real secrets like tokens/passwords)
+- `.env.example` — Template listing supported environment variables (copy to `.env` and fill values)
 
 ## MCP Mode (Local/Remote E2E)
 
