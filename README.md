@@ -355,7 +355,7 @@ Integration status:
 
 1. Create and activate a virtual environment
 2. Install dependencies from `requirements.txt`
-3. Install Playwright Chromium
+3. Install Playwright browsers (Chromium/Firefox/WebKit)
 4. Copy `.env.example` to `.env`
 5. Fill in any optional integration values you actually use
 6. Install pre-commit hooks (optional but recommended)
@@ -364,7 +364,7 @@ Integration status:
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
-python -m playwright install chromium
+python -m playwright install chromium firefox webkit
 copy .env.example .env
 pre-commit install  # Optional: install pre-commit hooks
 ```

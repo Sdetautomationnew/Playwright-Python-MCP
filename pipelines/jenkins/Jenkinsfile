@@ -95,7 +95,7 @@ pipeline {
                             . "$VENV_DIR/bin/activate"
                             python -m pip install --upgrade pip
                             pip install -r requirements.txt
-                            python -m playwright install --with-deps chromium
+                            python -m playwright install --with-deps chromium firefox webkit
                         '''
                     } else {
                         bat '''
@@ -103,7 +103,7 @@ pipeline {
                             call "%VENV_DIR%\\Scripts\\activate"
                             python -m pip install --upgrade pip
                             pip install -r requirements.txt
-                            python -m playwright install chromium
+                            python -m playwright install chromium firefox webkit
                         '''
                     }
                 }
