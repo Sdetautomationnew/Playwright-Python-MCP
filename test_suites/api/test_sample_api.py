@@ -11,4 +11,5 @@ class TestSampleAPI:
         # This is a placeholder - in real scenario, create a specific API client
         client = BaseAPIClient(env_config, base_url="https://jsonplaceholder.typicode.com")
         response = client.get("/posts/1")
-        assert response['id'] == 1
+        payload = response.json()
+        assert payload["id"] == 1
